@@ -366,7 +366,7 @@
                     "kind": "Route",
                     "apiVersion": "v1",
                     "metadata": {
-                        "name": "${APPLICATION_NAME}-service",
+                        "name": "${APPLICATION_NAME}-api",
                         "labels": {
                             "app": "${APPLICATION_NAME}"
                         }
@@ -495,7 +495,7 @@
                                         ],
                                         "env": [
                                             {
-                                                "name": "SERVICE_BACKENDS",
+                                                "name": "BACKEND_SERVICES",
                                                 "value": "${APPLICATION_NAME}:8082"
                                             }
                                         ]
