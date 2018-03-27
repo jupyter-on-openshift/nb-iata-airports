@@ -1,0 +1,560 @@
+{
+    "kind": "List",
+    "apiVersion": "v1",
+    "items": [
+        {
+            "kind": "Template",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "poc-notebook-http-1",
+                "annotations": {
+                    "openshift.io/display-name": "Notebook HTTP POC#1",
+                    "iconClass": "icon-python",
+                    "tags": "python,jupyter"
+                }
+            },
+            "parameters": [
+                {
+                    "name": "APPLICATION_NAME",
+                    "value": "poc-notebook-http-1",
+                    "required": true
+                },
+                {
+                    "name": "NOTEBOOK_PASSWORD",
+                    "value": "",
+                    "required": true
+                },
+                {
+                    "name": "VOLUME_SIZE",
+                    "value": "1Gi",
+                    "required": true
+                }
+            ],
+            "objects": [
+                {
+                    "kind": "ImageStream",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}-nb-s2i",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    }
+                },
+                {
+                    "kind": "BuildConfig",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}-nb-s2i",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    },
+                    "spec": {
+                        "triggers": [
+                            {
+                                "type": "ConfigChange"
+                            },
+                            {
+                                "type": "ImageChange"
+                            }
+                        ],
+                        "source": {
+                            "type": "Git",
+                            "git": {
+                                "uri": "https://github.com/jupyter-on-openshift/jupyter-notebooks.git"
+                            },
+                            "contextDir": "minimal-notebook"
+                        },
+                        "strategy": {
+                            "type": "Source",
+                            "sourceStrategy": {
+                                "from": {
+                                    "kind": "DockerImage",
+                                    "name": "centos/python-35-centos7:latest"
+                                }
+                            }
+                        },
+                        "output": {
+                            "to": {
+                                "kind": "ImageStreamTag",
+                                "name": "${APPLICATION_NAME}-nb-s2i:latest"
+                            }
+                        }
+                    }
+                },
+                {
+                    "kind": "ImageStream",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}-nb-img",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    }
+                },
+                {
+                    "kind": "BuildConfig",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}-nb-img",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    },
+                    "spec": {
+                        "triggers": [
+                            {
+                                "type": "ConfigChange"
+                            },
+                            {
+                                "type": "ImageChange"
+                            }
+                        ],
+                        "source": {
+                            "type": "Git",
+                            "git": {
+                                "uri": "https://github.com/jupyter-on-openshift/poc-notebook-http-1.git"
+                            },
+                            "contextDir": "notebook"
+                        },
+                        "strategy": {
+                            "type": "Source",
+                            "sourceStrategy": {
+                                "from": {
+                                    "kind": "ImageStreamTag",
+                                    "name": "${APPLICATION_NAME}-nb-s2i:latest"
+                                }
+                            }
+                        },
+                        "output": {
+                            "to": {
+                                "kind": "ImageStreamTag",
+                                "name": "${APPLICATION_NAME}-nb-img:latest"
+                            }
+                        }
+                    }
+                },
+                {
+                    "kind": "DeploymentConfig",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    },
+                    "spec": {
+                        "strategy": {
+                            "type": "Recreate"
+                        },
+                        "triggers": [
+                            {
+                                "type": "ConfigChange"
+                            },
+                            {
+                                "type": "ImageChange",
+                                "imageChangeParams": {
+                                    "automatic": true,
+                                    "containerNames": [
+                                        "setup-volume",
+                                        "notebook"
+                                    ],
+                                    "from": {
+                                        "kind": "ImageStreamTag",
+                                        "name": "${APPLICATION_NAME}-nb-img:latest"
+                                    }
+                                }
+                            }
+                        ],
+                        "replicas": 1,
+                        "selector": {
+                            "app": "${APPLICATION_NAME}",
+                            "deploymentconfig": "${APPLICATION_NAME}"
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "${APPLICATION_NAME}",
+                                    "deploymentconfig": "${APPLICATION_NAME}"
+                                }
+                            },
+                            "spec": {
+                                "volumes": [
+                                    {
+                                        "name": "data",
+                                        "persistentVolumeClaim": {
+                                            "claimName": "${APPLICATION_NAME}-data"
+                                        }
+                                    }
+                                ],
+                                "initContainers": [
+                                    {
+                                        "name": "setup-volume",
+                                        "image": "${APPLICATION_NAME}-nb-img:latest",
+                                        "command": [
+                                            "setup-volume.sh",
+                                            "/opt/app-root",
+                                            "/mnt/app-root"
+                                        ],
+                                        "resources": {
+                                            "limits": {
+                                                "memory": "256Mi"
+                                            }
+                                        },
+                                        "volumeMounts": [
+                                            {
+                                                "name": "data",
+                                                "mountPath": "/mnt"
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "containers": [
+                                    {
+                                        "name": "notebook",
+                                        "image": "${APPLICATION_NAME}-nb-img:latest",
+                                        "ports": [
+                                            {
+                                                "containerPort": 8080,
+                                                "protocol": "TCP"
+                                            },
+                                            {
+                                                "containerPort": 8081,
+                                                "protocol": "TCP"
+                                            },
+                                            {
+                                                "containerPort": 8081,
+                                                "protocol": "TCP"
+                                            }
+                                        ],
+                                        "volumeMounts": [
+                                            {
+                                                "name": "data",
+                                                "mountPath": "/opt/app-root",
+                                                "subPath": "app-root"
+                                            }
+                                        ],
+                                        "env": [
+                                            {
+                                                "name": "JUPYTER_NOTEBOOK_PASSWORD",
+                                                "value": "${NOTEBOOK_PASSWORD}"
+                                            },
+                                            {
+                                                "name": "JUPYTER_ENABLE_SUPERVISORD",
+                                                "value": "true"
+                                            },
+                                            {
+                                                "name": "JUPYTER_ENABLE_WEBDAV",
+                                                "value": "true"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                {
+                    "kind": "PersistentVolumeClaim",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}-data",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    },
+                    "spec": {
+                        "accessModes": [
+                            "ReadWriteOnce"
+                        ],
+                        "resources": {
+                            "requests": {
+                                "storage": "${VOLUME_SIZE}"
+                            }
+                        }
+                    }
+                },
+                {
+                    "kind": "Service",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    },
+                    "spec": {
+                        "ports": [
+                            {
+                                "name": "8080-tcp",
+                                "protocol": "TCP",
+                                "port": 8080,
+                                "targetPort": 8080
+                            },
+                            {
+                                "name": "8081-tcp",
+                                "protocol": "TCP",
+                                "port": 8081,
+                                "targetPort": 8081
+                            },
+                            {
+                                "name": "8082-tcp",
+                                "protocol": "TCP",
+                                "port": 8082,
+                                "targetPort": 8082
+                            }
+                        ],
+                        "selector": {
+                            "app": "${APPLICATION_NAME}",
+                            "deploymentconfig": "${APPLICATION_NAME}"
+                        }
+                    }
+                },
+                {
+                    "kind": "Route",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    },
+                    "spec": {
+                        "host": "",
+                        "to": {
+                            "kind": "Service",
+                            "name": "${APPLICATION_NAME}",
+                            "weight": 100
+                        },
+                        "port": {
+                            "targetPort": "8080-tcp"
+                        },
+                        "tls": {
+                            "termination": "edge",
+                            "insecureEdgeTerminationPolicy": "Redirect"
+                        }
+                    }
+                },
+                {
+                    "kind": "Route",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}-webdav",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    },
+                    "spec": {
+                        "host": "",
+                        "path": "/webdav",
+                        "to": {
+                            "kind": "Service",
+                            "name": "${APPLICATION_NAME}",
+                            "weight": 100
+                        },
+                        "port": {
+                            "targetPort": "8081-tcp"
+                        },
+                        "tls": {
+                            "termination": "edge",
+                            "insecureEdgeTerminationPolicy": "Redirect"
+                        }
+                    }
+                },
+                {
+                    "kind": "Route",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}-service",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    },
+                    "spec": {
+                        "host": "",
+                        "to": {
+                            "kind": "Service",
+                            "name": "${APPLICATION_NAME}",
+                            "weight": 100
+                        },
+                        "port": {
+                            "targetPort": "8082-tcp"
+                        },
+                        "tls": {
+                            "termination": "edge",
+                            "insecureEdgeTerminationPolicy": "Redirect"
+                        }
+                    }
+                },
+                {
+                    "kind": "ImageStream",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}-ui-img",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    }
+                },
+                {
+                    "kind": "BuildConfig",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}-ui-img",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    },
+                    "spec": {
+                        "triggers": [
+                            {
+                                "type": "ConfigChange"
+                            },
+                            {
+                                "type": "ImageChange"
+                            }
+                        ],
+                        "source": {
+                            "type": "Git",
+                            "git": {
+                                "uri": "https://github.com/jupyter-on-openshift/poc-notebook-http-1.git"
+                            },
+                            "contextDir": "client"
+                        },
+                        "strategy": {
+                            "type": "Source",
+                            "sourceStrategy": {
+                                "from": {
+                                    "kind": "DockerImage",
+                                    "name": "centos/python-35-centos7:latest"
+                                }
+                            }
+                        },
+                        "output": {
+                            "to": {
+                                "kind": "ImageStreamTag",
+                                "name": "${APPLICATION_NAME}-ui-img:latest"
+                            }
+                        }
+                    }
+                },
+                {
+                    "kind": "DeploymentConfig",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}-ui",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    },
+                    "spec": {
+                        "strategy": {
+                            "type": "Recreate"
+                        },
+                        "triggers": [
+                            {
+                                "type": "ConfigChange"
+                            },
+                            {
+                                "type": "ImageChange",
+                                "imageChangeParams": {
+                                    "automatic": true,
+                                    "containerNames": [
+                                        "client"
+                                    ],
+                                    "from": {
+                                        "kind": "ImageStreamTag",
+                                        "name": "${APPLICATION_NAME}-ui-img:latest"
+                                    }
+                                }
+                            }
+                        ],
+                        "replicas": 1,
+                        "selector": {
+                            "app": "${APPLICATION_NAME}-ui",
+                            "deploymentconfig": "${APPLICATION_NAME}-ui"
+                        },
+                        "template": {
+                            "metadata": {
+                                "labels": {
+                                    "app": "${APPLICATION_NAME}-ui",
+                                    "deploymentconfig": "${APPLICATION_NAME}-ui"
+                                }
+                            },
+                            "spec": {
+                                "containers": [
+                                    {
+                                        "name": "client",
+                                        "image": "${APPLICATION_NAME}-ui-img:latest",
+                                        "ports": [
+                                            {
+                                                "containerPort": 8080,
+                                                "protocol": "TCP"
+                                            }
+                                        ],
+                                        "env": [
+                                            {
+                                                "name": "SERVICE_BACKENDS",
+                                                "value": "${APPLICATION_NAME}:8082"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                {
+                    "kind": "Service",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}-ui",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    },
+                    "spec": {
+                        "ports": [
+                            {
+                                "name": "8080-tcp",
+                                "protocol": "TCP",
+                                "port": 8080,
+                                "targetPort": 8080
+                            }
+                        ],
+                        "selector": {
+                            "app": "${APPLICATION_NAME}-ui",
+                            "deploymentconfig": "${APPLICATION_NAME}-ui"
+                        }
+                    }
+                },
+                {
+                    "kind": "Route",
+                    "apiVersion": "v1",
+                    "metadata": {
+                        "name": "${APPLICATION_NAME}-ui",
+                        "labels": {
+                            "app": "${APPLICATION_NAME}"
+                        }
+                    },
+                    "spec": {
+                        "host": "",
+                        "to": {
+                            "kind": "Service",
+                            "name": "${APPLICATION_NAME}-ui",
+                            "weight": 100
+                        },
+                        "port": {
+                            "targetPort": "8080-tcp"
+                        },
+                        "tls": {
+                            "termination": "edge",
+                            "insecureEdgeTerminationPolicy": "Redirect"
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}
